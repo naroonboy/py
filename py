@@ -17,38 +17,28 @@ kibana_headers = {
     'kbn-xsrf': 'true'
 }
 
-# Get the dashboard object
-dashboard_url = f"{kibana_url}/api/kibana/dashboards/export?dashboard={dashboard_id}"
-dashboard_response = requests.get(dashboard_url, headers=kibana_headers, auth=kibana_auth)
-dashboard_response.raise_for_status()
-dashboard_object = dashboard_response.json()
-
-# Get the visualizations and index patterns
-objects_url = f"{kibana_url}/api/kibana/objects"
-objects_response = requests.get(objects_url, headers=kibana_headers, auth=kibana_auth)
-objects_response.raise_for_status()
-objects_data = objects_response.json()
-
-# Filter the visualizations and index patterns to only include those used in the dashboard
-visualization_ids = set()
-index_pattern_ids = set()
-for panel in dashboard_object['dashboard']['panelsJSON']:
-    if panel['type'] == 'visualization':
-        visualization_ids.add(panel['id'])
-    elif panel['type'] == 'search':
-        index_pattern_ids.add(panel['index_pattern_id'])
-visualization_objects = [obj for obj in objects_data if obj['type'] == 'visualization' and obj['id'] in visualization_ids]
-index_pattern_objects = [obj for obj in objects_data if obj['type'] == 'index-pattern' and obj['id'] in index_pattern_ids]
-
-# Build the final object with all the necessary components
-final_object = {
-    'dashboard': dashboard_object['dashboard'],
-    'visualizations': visualization_objects,
-    'index-patterns': index_pattern_objects
+# Build the request body with the dashboard ID and includeReferencesDeep option
+request_body = {
+    'dashboard': {
+        'id': dashboard_id
+    },
+    'type': 'dashboard',
+    'version': 1,
+    'attributes': {
+        'title': 'Dashboard Title'
+    },
+    'references': [],
+    'includeReferencesDeep': True
 }
 
-# Save the final object to a file
-with open(output_path, 'w') as f:
-    json.dump(final_object, f)
+# Send the export request
+export_url = f"{kibana_url}/api/saved_objects/_export"
+export_response = requests.post(export_url, headers=kibana_headers, auth=kibana_auth, json=request_body)
+export_response.raise_for_status()
+export_data = export_response.content
+
+# Save the export data to a file
+with open(output_path, 'wb') as f:
+    f.write(export_data)
 
 print(f"Dashboard {dashboard_id} exported to {output_path}")
