@@ -1,0 +1,15 @@
+---
+- name: Perform nslookup for inventory hosts and write to a file
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Perform nslookup
+      shell: nslookup {{ inventory_hostname }}
+      register: nslookup_result
+
+    - name: Write nslookup result to file
+      lineinfile:
+        path: /path/to/nslookup_results.txt
+        line: "{{ inventory_hostname }}: {{ nslookup_result.stdout }}"
+        create: yes
+      delegate_to: localhost
