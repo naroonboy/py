@@ -1,15 +1,19 @@
 ---
-- name: Perform nslookup for inventory hosts and write to a file
-  hosts: all
+- name: Perform nslookup for VIPs and write to a file
+  hosts: localhost
   gather_facts: false
+  vars_files:
+    - vips.yml
+
   tasks:
-    - name: Perform nslookup
-      shell: nslookup {{ inventory_hostname }}
+    - name: Perform nslookup for each VIP
+      shell: nslookup {{ item }}
       register: nslookup_result
+      with_items: "{{ vips }}"
 
     - name: Write nslookup result to file
       lineinfile:
         path: /path/to/nslookup_results.txt
-        line: "{{ inventory_hostname }}: {{ nslookup_result.stdout }}"
+        line: "{{ item.item }}: {{ item.stdout }}"
         create: yes
-      delegate_to: localhost
+      loop: "{{ nslookup_result.results }}"
