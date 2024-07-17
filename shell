@@ -1,0 +1,18 @@
+#!/bin/bash
+# Script to get Elasticsearch _cluster/stats output, write it to a file, and extract versions
+
+# Elasticsearch host
+ES_HOST="http://localhost:9200"
+# Output file
+OUTPUT_FILE="/path/to/cluster_stats.json"
+# Versions file
+VERSIONS_FILE="/path/to/versions.txt"
+
+# Get the _cluster/stats output and write it to a file
+curl -XGET "$ES_HOST/_cluster/stats?pretty" -o "$OUTPUT_FILE"
+
+# Extract Elasticsearch versions and write to a file
+jq '.nodes.versions' "$OUTPUT_FILE" > "$VERSIONS_FILE"
+
+echo "Cluster stats written to $OUTPUT_FILE"
+echo "Elasticsearch versions written to $VERSIONS_FILE"
