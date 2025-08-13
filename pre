@@ -1,0 +1,22 @@
+Prerequisites
+•  Install dependencies: Run npm init -y in a new directory, then npm install axios.
+•  For SaaS: Create an API Client in the Controller UI (Settings > API Clients) and note the client name and secret.
+•  For on-premises: Use basic auth (username@account:password).
+•  Replace placeholders: CONTROLLER_URL, CLIENT_NAME, CLIENT_SECRET.
+•  Test in a non-production environment, as the endpoint /controller/restui/applications/createApplicationWithType is internal and may vary by Controller version.
+
+
+Usage
+1.  Save the script as create-eum-app.js.
+2.  Update placeholders (CONTROLLER_URL, CLIENT_NAME, CLIENT_SECRET).
+3.  For on-premises, uncomment the basic auth section and replace user@account and password.
+4.  Run: node create-eum-app.js.
+5.  When prompted, enter the application name (required) and description (optional, press Enter to skip).
+6.  Check the console for the application ID or error details.
+Notes
+•  The script validates that the app name is not empty.
+•  The endpoint /controller/restui/applications/createApplicationWithType is internal but commonly used. Verify compatibility with your Controller version.
+•  Response includes the appId, which you can use for further configurations (e.g., roles, alerts).
+•  If errors occur (e.g., 403 Forbidden), check API Client permissions or credentials. For SaaS, ensure the API Client has scope for application management.
+•  The readline module is built into Node.js, so no additional installation is needed.
+•  No official Node.js SDK exists for this; axios is reliable for REST calls.
