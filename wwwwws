@@ -1,0 +1,106 @@
+from flask import Flask, render_template_string
+import requests
+import time
+
+app = Flask(__name__)
+
+# AppDynamics config
+CONTROLLER_URL = "https://<controller-host>:<port>/controller"
+CLIENT_ID = "<client-name>@<account-name>"
+CLIENT_SECRET = "<client-secret>"
+
+# Applications to monitor
+APPLICATIONS = [
+    "App1",
+    "App2",
+    "App3",
+    "App4",
+    "App5"
+]
+
+# Cache token
+access_token = None
+token_expiry = 0
+
+def get_access_token():
+    global access_token, token_expiry
+    if access_token and time.time() < token_expiry:
+        return access_token
+
+    url = f"{CONTROLLER_URL}/api/oauth/access_token"
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    resp = requests.post(url, data=payload, headers=headers)
+    if resp.status_code == 200:
+        token_data = resp.json()
+        access_token = token_data["access_token"]
+        token_expiry = time.time() + token_data["expires_in"] - 60
+        return access_token
+    else:
+        raise Exception(f"Failed to get token: {resp.text}")
+
+@app.route("/")
+def health_status():
+    results = []
+    token = get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for app in APPLICATIONS:
+        try:
+            url = f"{CONTROLLER_URL}/rest/applications/{app}/overallHealth"
+            response = requests.get(url, headers=headers)
+
+            if response.status_code == 200:
+                data = response.json()
+                status = data.get("healthStatus", "UNKNOWN").upper()
+            else:
+                status = f"Error {response.status_code}"
+        except Exception as e:
+            status = f"Error: {str(e)}"
+
+        # Map status → color
+        color_map = {
+            "GOOD": "green",
+            "WARNING": "orange",
+            "CRITICAL": "red",
+        }
+        color = color_map.get(status, "gray")
+
+        results.append({"app": app, "status": status, "color": color})
+
+    # Simple HTML template with colors
+    template = """
+    <html>
+    <head>
+        <title>AppDynamics Health</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            h1 { color: #333; }
+            table { border-collapse: collapse; width: 50%; }
+            th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+            th { background-color: #f2f2f2; }
+        </style>
+    </head>
+    <body>
+        <h1>AppDynamics Application Health</h1>
+        <table>
+            <tr><th>Application</th><th>Status</th></tr>
+            {% for r in results %}
+                <tr>
+                    <td>{{ r.app }}</td>
+                    <td style="color: {{ r.color }}; font-weight: bold;">{{ r.status }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    </body>
+    </html>
+    """
+    return render_template_string(template, results=results)
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
