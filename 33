@@ -1,0 +1,138 @@
+import time
+from opentelemetry.sdk.resources import Resource
+import random
+import socket
+import platform
+import logging
+from opentelemetry import trace, metrics
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+import os
+from dotenv import load_dotenv
+
+# Try to import OTLP exporters for trace and metrics, fallback to common import if needed
+try:
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+except ImportError:
+    try:
+        from opentelemetry.exporter.otlp.proto.http import OTLPSpanExporter, OTLPMetricExporter, OTLPLogExporter
+    except ImportError:
+        from opentelemetry.exporter.otlp.exporter import OTLPSpanExporter, OTLPMetricExporter, OTLPLogExporter
+
+# Optionally load environment variables from .env
+load_dotenv()
+
+# OTLP configuration from environment or .env
+# Your token must have "Ingest OpenTelemetry traces", "Ingest metrics", and/or "Ingest logs" scopes.
+OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "https://xuf93029.live.dynatrace.com/api/v2/otlp")
+OTLP_HEADERS = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS")
+if not OTLP_HEADERS:
+    raise RuntimeError("OTEL_EXPORTER_OTLP_HEADERS not set in environment or .env file.")
+
+# Set up OpenTelemetry Resource
+resource = Resource.create(attributes={
+    "service.name": os.environ.get("OTEL_SERVICE_NAME", "mastinder-python-demo"),
+    "host.name": socket.gethostname(),
+    "os.type": platform.system(),
+})
+
+# Set up TracerProvider and OTLP exporter for traces
+trace.set_tracer_provider(TracerProvider(resource=resource))
+tracer = trace.get_tracer(__name__)
+span_exporter = OTLPSpanExporter(
+    endpoint=OTLP_ENDPOINT,
+    headers=dict(h.split("=", 1) for h in OTLP_HEADERS.split(", ")) if OTLP_HEADERS else None,
+)
+span_processor = BatchSpanProcessor(span_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+# Set up MeterProvider and OTLP exporter for metrics
+metric_exporter = OTLPMetricExporter(
+    endpoint=OTLP_ENDPOINT,
+    headers=dict(h.split("=", 1) for h in OTLP_HEADERS.split(", ")) if OTLP_HEADERS else None,
+)
+metric_reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=5000)
+metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
+meter = metrics.get_meter(__name__)
+request_counter = meter.create_counter(
+    name="demo_app_requests_total",
+    description="Total requests to the demo app",
+    unit="1"
+)
+request_duration_hist = meter.create_histogram(
+    name="demo_app_request_duration_seconds",
+    description="Request duration in seconds",
+    unit="s"
+)
+
+# Set up LoggerProvider and OTLP exporter for logs
+log_exporter = OTLPLogExporter(
+    endpoint=OTLP_ENDPOINT,
+    headers=dict(h.split("=", 1) for h in OTLP_HEADERS.split(", ")) if OTLP_HEADERS else None,
+)
+logger_provider = LoggerProvider(resource=resource)
+log_processor = BatchLogRecordProcessor(log_exporter)
+logger_provider.add_log_record_processor(log_processor)
+logging.setLoggerClass(logging.getLoggerClass())
+otel_handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
+logging.basicConfig(handlers=[otel_handler], level=logging.INFO)
+logger = logging.getLogger("otel-demo-app")
+
+# --- Demo HTTP server to generate telemetry on request ---
+
+from flask import Flask, jsonify
+
+# Add Flask app for health/info endpoints
+app = Flask(__name__)
+
+# / endpoint
+@app.route("/")
+def root():
+    start = time.time()
+    with tracer.start_as_current_span("root_request") as span:
+        span.set_attribute("custom.demo", "root called")
+        request_counter.add(1, {"endpoint": "/"})
+        # Simulate work and nested span
+        with tracer.start_as_current_span("child_work") as child_span:
+            delay = random.uniform(0.05, 0.3)
+            child_span.set_attribute("work.delay", delay)
+            time.sleep(delay)
+        duration = time.time() - start
+        request_duration_hist.record(duration, {"endpoint": "/"})
+        trace_id = format(span.get_span_context().trace_id, "032x")
+        return jsonify({"message": "Hello from root!", "trace_id": trace_id, "duration": duration})
+
+# /info endpoint
+@app.route("/info")
+def info():
+    return jsonify({"service": "mastinder-otel-demo", "version": "1.0.0"})
+
+# /health endpoint
+@app.route("/health")
+def health():
+    return jsonify({"status": "UP"})
+
+# /status endpoint
+@app.route("/status")
+def status():
+    return jsonify({"status": "ok", "uptime": "unknown"})
+
+# /logtest endpoint
+@app.route("/logtest")
+def logtest():
+    logger.info("This is an info log sent to Dynatrace via OTLP.")
+    try:
+        1 / 0
+    except Exception as e:
+        logger.error("This is an error log sent to Dynatrace via OTLP.", exc_info=e)
+    return jsonify({"result": "Log and error sent to Dynatrace"})
+
+if __name__ == "__main__":
+    print("Starting Flask app on http://localhost:8080 ...")
+    app.run(host="0.0.0.0", port=8080)
