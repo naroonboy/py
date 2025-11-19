@@ -9,25 +9,18 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Load detectors JSON exported from non-prod
-with open("detectors_with_tag_xxx.json", "r") as f:
+# Load cleaned detectors JSON exported from non-prod
+with open("detectors_with_tag_xxx_clean.json", "r") as f:
     detectors_data = json.load(f)
 
-# Assuming detectors_data['results'] holds the list of detectors
+# Iterate through detectors and create each on prod
 for detector in detectors_data.get("results", []):
-    # Remove fields that are not allowed or relevant for creation
-    detector.pop("id", None)
-    detector.pop("created", None)
-    detector.pop("lastModified", None)
-    detector.pop("status", None)
-
-    # POST to create detector on prod
     response = requests.post(
         SPLUNK_API_URL_TARGET,
         headers=headers,
         json=detector
     )
-    if response.status_code == 200 or response.status_code == 201:
+    if response.status_code in (200, 201):
         print(f"Created detector: {detector.get('name', '<no name>')}")
     else:
         print(f"Failed to create detector {detector.get('name', '<no name>')}: {response.text}")
