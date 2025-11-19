@@ -1,0 +1,33 @@
+import requests
+import json
+
+SPLUNK_API_TOKEN_TARGET = "YOUR_PROD_API_TOKEN"
+SPLUNK_API_URL_TARGET = "https://api.<REALM>.signalfx.com/v2/detector"
+
+headers = {
+    "Authorization": f"Bearer {SPLUNK_API_TOKEN_TARGET}",
+    "Content-Type": "application/json"
+}
+
+# Load detectors JSON exported from non-prod
+with open("detectors_with_tag_xxx.json", "r") as f:
+    detectors_data = json.load(f)
+
+# Assuming detectors_data['results'] holds the list of detectors
+for detector in detectors_data.get("results", []):
+    # Remove fields that are not allowed or relevant for creation
+    detector.pop("id", None)
+    detector.pop("created", None)
+    detector.pop("lastModified", None)
+    detector.pop("status", None)
+
+    # POST to create detector on prod
+    response = requests.post(
+        SPLUNK_API_URL_TARGET,
+        headers=headers,
+        json=detector
+    )
+    if response.status_code == 200 or response.status_code == 201:
+        print(f"Created detector: {detector.get('name', '<no name>')}")
+    else:
+        print(f"Failed to create detector {detector.get('name', '<no name>')}: {response.text}")
