@@ -1,0 +1,32 @@
+import requests
+
+SPLUNK_API_TOKEN = "YOUR_API_TOKEN"
+SPLUNK_API_URL = "https://api.<REALM>.signalfx.com/v2/detector"  # Replace <REALM> appropriately
+TAG_TO_SEARCH = "xxx"  # Your specific tag
+
+# API request header with authorization
+headers = {
+    "Authorization": f"Bearer {SPLUNK_API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# The filter uses query params - tags are usually passed as "tags=xxx"
+params = {
+    "tags": TAG_TO_SEARCH
+}
+
+# Send GET request to fetch detectors
+response = requests.get(
+    SPLUNK_API_URL,
+    headers=headers,
+    params=params
+)
+
+# Handle and print the response
+if response.status_code == 200:
+    detectors = response.json()
+    print("Detectors with tag:", TAG_TO_SEARCH)
+    for detector in detectors.get("results", []):
+        print(detector)
+else:
+    print("Failed to fetch detectors:", response.text)
