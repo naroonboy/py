@@ -1,0 +1,29 @@
+import requests
+import json
+
+SPLUNK_API_TOKEN = "YOUR_API_TOKEN"
+SPLUNK_API_URL = "https://api.<REALM>.signalfx.com/v2/detector"  # Replace <REALM>
+TAG_TO_SEARCH = "xxx"
+
+headers = {
+    "Authorization": f"Bearer {SPLUNK_API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+params = {
+    "tags": TAG_TO_SEARCH
+}
+
+response = requests.get(
+    SPLUNK_API_URL,
+    headers=headers,
+    params=params
+)
+
+if response.status_code == 200:
+    detectors = response.json()
+    with open("detectors_with_tag_xxx.json", "w") as json_file:
+        json.dump(detectors, json_file, indent=4)
+    print(f"Detectors with tag '{TAG_TO_SEARCH}' have been written to detectors_with_tag_xxx.json")
+else:
+    print("Failed to fetch detectors:", response.text)
