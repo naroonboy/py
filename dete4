@@ -1,0 +1,29 @@
+import requests
+import json
+
+# Configuration: replace with your org token and realm
+REALM = "us0"
+ORG_ACCESS_TOKEN = "YOUR_ADMIN_API_TOKEN"
+
+headers = {
+    "Authorization": f"Bearer {ORG_ACCESS_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+url = f"https://api.{REALM}.signalfx.com/v2/org/tokens"
+
+response = requests.get(url, headers=headers)
+response.raise_for_status()
+
+tokens = response.json().get("results", [])
+
+with open("tokens_for_splunk.ndjson", "w") as f:
+    for token in tokens:
+        data = {
+            "token_name": token.get("name"),
+            "owner": token.get("createdBy"),
+            "expiry_date": token.get("expirationDate")
+        }
+        f.write(json.dumps(data) + "\n")
+
+print(f"Exported {len(tokens)} tokens to tokens_for_splunk.ndjson")
