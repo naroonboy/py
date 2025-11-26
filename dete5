@@ -1,0 +1,47 @@
+import requests
+import json
+
+SPLUNK_API_TOKEN = "YOUR_API_TOKEN"
+REALM = "us1"  # TODO: set your actual realm
+SPLUNK_API_URL = f"https://api.{REALM}.signalfx.com/v2/detector"
+
+# Request multiple tags as a comma-separated list during runtime
+tags_input = input("Enter one or more tags to search for detectors (comma-separated): ")
+# Clean and join tags to a single comma-separated string without spaces
+TAG_TO_SEARCH = ",".join([tag.strip() for tag in tags_input.split(",") if tag.strip()])
+
+headers = {
+    "Authorization": f"Bearer {SPLUNK_API_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+params = {
+    "tags": TAG_TO_SEARCH
+}
+
+response = requests.get(SPLUNK_API_URL, headers=headers, params=params)
+
+if response.status_code == 200:
+    detectors = response.json() or {}
+
+    system_fields = [
+        "id",
+        "created",
+        "lastModified",
+        "status",
+        "creator",
+        "updater",
+        "parentDetectorId"
+    ]
+
+    for detector in detectors.get("results", []):
+        for field in system_fields:
+            detector.pop(field, None)
+
+    output_filename = f"detectors_with_tags_{'_'.join(TAG_TO_SEARCH.split(','))}_clean.json"
+    with open(output_filename, "w") as json_file:
+        json.dump(detectors, json_file, indent=4)
+
+    print(f"Clean detectors with tags '{TAG_TO_SEARCH}' have been written to {output_filename}")
+else:
+    print(f"Failed to fetch detectors: {response.status_code} {response.text}")
