@@ -1,0 +1,73 @@
+import requests
+
+# ----------------------------------------------------------
+# CONFIGURATION – fill these once
+# ----------------------------------------------------------
+controller_base = "https://<your-controller-host>"  # no trailing slash
+client_id = "<your-client-id>"
+client_secret = "<your-client-secret>"
+account_name = "<your-account-name>"               # e.g., customer1
+
+# OAuth token endpoint
+token_url = f"{controller_base}/controller/api/oauth/access_token"
+
+
+# ----------------------------------------------------------
+# 1. Get OAuth Access Token
+# ----------------------------------------------------------
+def get_access_token():
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": f"{client_id}@{account_name}",
+        "client_secret": client_secret
+    }
+
+    print("Requesting OAuth token...")
+    response = requests.post(token_url, data=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to get token: {response.text}")
+
+    token = response.json().get("access_token")
+    print("✔ Token retrieved")
+    return token
+
+
+# ----------------------------------------------------------
+# 2. Download dashboard JSON WITH correct API
+# ----------------------------------------------------------
+def download_dashboard(token, dashboard_id):
+    url = (
+        f"{controller_base}/controller/CustomDashboardImportExportServlet"
+        f"?dashboardId={dashboard_id}"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    print(f"Requesting dashboard {dashboard_id}...")
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(
+            f"Failed to download dashboard {dashboard_id}:\n"
+            f"Status: {response.status_code}\n"
+            f"Body: {response.text}"
+        )
+
+    filename = f"dashboard_{dashboard_id}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(response.text)
+
+    print(f"✔ Dashboard saved as {filename}")
+
+
+# ----------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------
+if __name__ == "__main__":
+    dashboard_id = input("Enter the Dashboard ID to download: ").strip()
+    token = get_access_token()
+    download_dashboard(token, dashboard_id)
