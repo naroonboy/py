@@ -1,0 +1,98 @@
+import requests
+
+# -------------------------------------------------------
+# CONFIGURATION
+# -------------------------------------------------------
+controller_base = "https://<your-controller-host>"  # no trailing slash
+client_id = "<your-client-id>"
+client_secret = "<your-client-secret>"
+account_name = "<your-account-name>"  # e.g., customer1
+
+# OAuth token endpoint
+token_url = f"{controller_base}/controller/api/oauth/access_token"
+
+
+# -------------------------------------------------------
+# 1. Get OAuth Access Token
+# -------------------------------------------------------
+def get_access_token():
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": f"{client_id}@{account_name}",
+        "client_secret": client_secret
+    }
+
+    response = requests.post(token_url, data=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to get token: {response.text}")
+
+    return response.json().get("access_token")
+
+
+# -------------------------------------------------------
+# 2. Fetch all dashboards and find ID by name
+# -------------------------------------------------------
+def get_dashboard_id_by_name(token, name):
+    url = f"{controller_base}/controller/restui/dashboard/getAllDashboardsByType/false"
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to list dashboards: {response.text}")
+
+    dashboards = response.json()
+
+    # Case-insensitive match
+    name_lower = name.lower()
+
+    for d in dashboards:
+        if d.get("name", "").lower() == name_lower:
+            return d.get("id")
+
+    return None
+
+
+# -------------------------------------------------------
+# 3. Download Dashboard JSON via Servlet
+# -------------------------------------------------------
+def download_dashboard(token, dashboard_id):
+    url = (
+        f"{controller_base}/controller/CustomDashboardImportExportServlet"
+        f"?dashboardId={dashboard_id}&format=json"
+    )
+
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(
+            f"Failed to download dashboard {dashboard_id} "
+            f"(status {response.status_code}): {response.text}"
+        )
+
+    filename = f"dashboard_{dashboard_id}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(response.text)
+
+    print(f"✔ Dashboard saved as {filename}")
+
+
+# -------------------------------------------------------
+# MAIN EXECUTION
+# -------------------------------------------------------
+if __name__ == "__main__":
+    dashboard_name = input("Enter dashboard name: ").strip()
+
+    token = get_access_token()
+
+    dashboard_id = get_dashboard_id_by_name(token, dashboard_name)
+
+    if dashboard_id is None:
+        print(f"❌ No dashboard found with name: {dashboard_name}")
+    else:
+        print(f"✔ Found dashboard ID: {dashboard_id}")
+        download_dashboard(token, dashboard_id)
